@@ -336,6 +336,11 @@ namespace terrier::execution::vm {
     OperandType::Local)                                                                                               \
   F(JoinHashTableIterGetRow, OperandType::Local, OperandType::Local)                                                  \
   F(JoinHashTableIterClose, OperandType::Local)                                                                       \
+  F(JoinHashTableEntryIteratorInit, OperandType::Local, OperandType::Local)                                           \
+  F(JoinHashTableEntryIteratorHasNext, OperandType::Local, OperandType::Local)                                        \
+  F(JoinHashTableEntryIteratorNext, OperandType::Local)                                                               \
+  F(JoinHashTableEntryIteratorGetRow, OperandType::Local, OperandType::Local)                                         \
+  F(JoinHashTableEntryIteratorClose, OperandType::Local)                                                              \
   F(JoinHashTableBuild, OperandType::Local)                                                                           \
   F(JoinHashTableBuildParallel, OperandType::Local, OperandType::Local, OperandType::Local)                           \
   F(JoinHashTableFree, OperandType::Local)                                                                            \

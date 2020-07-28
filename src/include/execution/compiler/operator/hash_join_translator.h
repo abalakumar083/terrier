@@ -140,20 +140,38 @@ class HashJoinRightTranslator : public OperatorTranslator {
   // Fill the probe row if necessary
   void FillProbeRow(FunctionBuilder *builder);
 
-  // Declare the hash table iterator
-  void DeclareIterator(FunctionBuilder *builder);
+  // Declare the hash table join iterator
+  void DeclareJoinIterator(FunctionBuilder *builder);
 
   // Loop to probe the hash table
   void GenProbeLoop(FunctionBuilder *builder);
 
   // Close the iterator after the loop
-  void GenIteratorClose(FunctionBuilder *builder);
+  void GenJoinIteratorClose(FunctionBuilder *builder);
 
   // Declare the matching tuple
   void DeclareMatch(FunctionBuilder *builder);
 
+  // Declare the iterator for aggregation loop (only for outer joins)
+  void DeclareEntryIterator(FunctionBuilder *builder);
+
+  // Loop to aggregate unmarked left rows
+  void GenEntryLoop(FunctionBuilder *builder);
+
+  // Declare the found tuple
+  void DeclareResult(FunctionBuilder *builder);
+
+  // Close the agg iterator after the loop
+  void GenEntryIteratorClose(FunctionBuilder *builder);
+
   // If statement for left semi joins
   void GenLeftSemiJoinCondition(FunctionBuilder *builder);
+
+  // If statement for left outer joins
+  void GenLeftJoinCondition(FunctionBuilder *builder);
+
+  // Statement to set mark flag in left joins
+  void SetLeftJoinFlag(FunctionBuilder *builder);
 
   // Complete the join key check function
   void GenKeyCheck(FunctionBuilder *builder);
@@ -171,10 +189,12 @@ class HashJoinRightTranslator : public OperatorTranslator {
 
   // Structs, functions, and locals
   static constexpr const char *RIGHT_ATTR_NAME = "right_attr";
+  bool agg_loop_flag_;
   ast::Identifier hash_val_;
   ast::Identifier probe_struct_;
   ast::Identifier probe_row_;
   ast::Identifier key_check_;
   ast::Identifier join_iter_;
+  ast::Identifier join_entry_iter_;
 };
 }  // namespace terrier::execution::compiler

@@ -64,6 +64,7 @@ class Context;
   NON_PRIM(JoinHashTable, terrier::execution::sql::JoinHashTable)                               \
   NON_PRIM(JoinHashTableVectorProbe, terrier::execution::sql::JoinHashTableVectorProbe)         \
   NON_PRIM(JoinHashTableIterator, terrier::execution::sql::JoinHashTableIterator)               \
+  NON_PRIM(JoinHashTableEntryIterator, terrier::execution::sql::JoinHashTableEntryIterator)     \
   NON_PRIM(MemoryPool, terrier::execution::sql::MemoryPool)                                     \
   NON_PRIM(Sorter, terrier::execution::sql::Sorter)                                             \
   NON_PRIM(SorterIterator, terrier::execution::sql::SorterIterator)                             \

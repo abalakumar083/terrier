@@ -123,6 +123,11 @@ namespace terrier::execution::ast {
   F(JoinHashTableIterHasNext, joinHTIterHasNext)                        \
   F(JoinHashTableIterGetRow, joinHTIterGetRow)                          \
   F(JoinHashTableIterClose, joinHTIterClose)                            \
+  F(JoinHashTableEntryIterInit, joinHTEntryIterInit)                    \
+  F(JoinHashTableEntryIterHasNext, joinHTEntryIterHasNext)              \
+  F(JoinHashTableEntryIterNext, joinHTEntryIterNext)                    \
+  F(JoinHashTableEntryIterGetRow, joinHTEntryIterGetRow)                \
+  F(JoinHashTableEntryIterClose, joinHTEntryIterClose)                  \
   F(JoinHashTableBuild, joinHTBuild)                                    \
   F(JoinHashTableBuildParallel, joinHTBuildParallel)                    \
   F(JoinHashTableFree, joinHTFree)                                      \

@@ -1352,6 +1352,39 @@ void VM::Interpret(const uint8_t *ip, Frame *frame) {
     DISPATCH_NEXT();
   }
 
+  OP(JoinHashTableEntryIteratorInit) : {
+    auto *iter = frame->LocalAt<sql::JoinHashTableEntryIterator *>(READ_LOCAL_ID());
+    auto *join_hash_table = frame->LocalAt<sql::JoinHashTable *>(READ_LOCAL_ID());
+    OpJoinHashTableEntryIteratorInit(iter, join_hash_table);
+    DISPATCH_NEXT();
+  }
+
+  OP(JoinHashTableEntryIteratorHasNext) : {
+    auto *has_more = frame->LocalAt<bool *>(READ_LOCAL_ID());
+    auto *iter = frame->LocalAt<sql::JoinHashTableEntryIterator *>(READ_LOCAL_ID());
+    OpJoinHashTableEntryIteratorHasNext(has_more, iter);
+    DISPATCH_NEXT();
+  }
+
+  OP(JoinHashTableEntryIteratorNext) : {
+    auto *iter = frame->LocalAt<sql::JoinHashTableEntryIterator *>(READ_LOCAL_ID());
+    OpJoinHashTableEntryIteratorNext(iter);
+    DISPATCH_NEXT();
+  }
+
+  OP(JoinHashTableEntryIteratorGetRow) : {
+    auto *row = frame->LocalAt<const byte **>(READ_LOCAL_ID());
+    auto *iter = frame->LocalAt<sql::JoinHashTableEntryIterator *>(READ_LOCAL_ID());
+    OpJoinHashTableEntryIteratorGetRow(row, iter);
+    DISPATCH_NEXT();
+  }
+
+  OP(JoinHashTableEntryIteratorClose) : {
+    auto *iter = frame->LocalAt<sql::JoinHashTableEntryIterator *>(READ_LOCAL_ID());
+    OpJoinHashTableEntryIteratorClose(iter);
+    DISPATCH_NEXT();
+  }
+
   OP(JoinHashTableBuild) : {
     auto *join_hash_table = frame->LocalAt<sql::JoinHashTable *>(READ_LOCAL_ID());
     OpJoinHashTableBuild(join_hash_table);

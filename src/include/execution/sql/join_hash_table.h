@@ -23,6 +23,7 @@ namespace terrier::execution::sql {
 
 class ThreadStateContainer;
 class JoinHashTableIterator;
+class JoinHashTableEntryIterator;
 
 /**
  * The main join hash table. Join hash tables are bulk-loaded through calls to
@@ -136,6 +137,7 @@ class EXPORT JoinHashTable {
   bool UseConciseHashTable() const noexcept { return use_concise_ht_; }
 
  private:
+  friend class execution::sql::JoinHashTableEntryIterator;
   friend class execution::sql::test::JoinHashTableTest;
 
   // Access a stored entry by index
@@ -307,5 +309,47 @@ inline bool JoinHashTableIterator::HasNext(JoinHashTableIterator::KeyEq key_eq, 
   }
   return false;
 }
+
+// ---------------------------------------------------------
+// Join Hash Table Entry Iterator
+// ---------------------------------------------------------
+
+/**
+ * An iterator over the contents of an join hash table
+ * TODO(abalakum): Make sure you never use a concise table when doing left outer joins
+ */
+class JoinHashTableEntryIterator {
+ public:
+  /**
+   * Constructor
+   * @param agg_table hash table to iterator over
+   */
+  explicit JoinHashTableEntryIterator(const JoinHashTable &join_table) : iter_(join_table.generic_hash_table_) {}
+
+  /**
+   * Does this iterate have more data
+   * @return True if the iterator has more data; false otherwise
+   */
+  bool HasNext() const { return iter_.HasNext(); }
+
+  /**
+   * Advance the iterator
+   */
+  void Next() { iter_.Next(); }
+
+  /**
+   * Return a pointer to the current row. It assumed the called has checked the
+   * iterator is valid.
+   */
+  const byte *GetCurrentEntryRow() const {
+    auto *ht_entry = iter_.GetCurrentEntry();
+    return ht_entry->payload_;
+  }
+
+ private:
+  // The iterator over the aggregation hash table
+  // TODO(pmenon): Switch to vectorized iterator when perf is better
+  GenericHashTableIterator<false> iter_;
+};
 
 }  // namespace terrier::execution::sql

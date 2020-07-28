@@ -1288,6 +1288,36 @@ void BytecodeGenerator::VisitBuiltinJoinHashTableCall(ast::CallExpr *call, ast::
       Emitter()->Emit(Bytecode::JoinHashTableIterClose, iterator);
       break;
     }
+    case ast::Builtin::JoinHashTableEntryIterInit: {
+      LocalVar join_ht_iter = VisitExpressionForRValue(call->Arguments()[0]);
+      LocalVar join_ht = VisitExpressionForRValue(call->Arguments()[1]);
+      Emitter()->Emit(Bytecode::JoinHashTableEntryIteratorInit, join_ht_iter, join_ht);
+      break;
+    }
+    case ast::Builtin::JoinHashTableEntryIterHasNext: {
+      LocalVar has_more = ExecutionResult()->GetOrCreateDestination(call->GetType());
+      LocalVar join_ht_iter = VisitExpressionForRValue(call->Arguments()[0]);
+      Emitter()->Emit(Bytecode::JoinHashTableEntryIteratorHasNext, has_more, join_ht_iter);
+      ExecutionResult()->SetDestination(has_more.ValueOf());
+      break;
+    }
+    case ast::Builtin::JoinHashTableEntryIterNext: {
+      LocalVar join_ht_iter = VisitExpressionForRValue(call->Arguments()[0]);
+      Emitter()->Emit(Bytecode::JoinHashTableEntryIteratorNext, join_ht_iter);
+      break;
+    }
+    case ast::Builtin::JoinHashTableEntryIterGetRow: {
+      LocalVar row_ptr = ExecutionResult()->GetOrCreateDestination(call->GetType());
+      LocalVar join_ht_iter = VisitExpressionForRValue(call->Arguments()[0]);
+      Emitter()->Emit(Bytecode::JoinHashTableEntryIteratorGetRow, row_ptr, join_ht_iter);
+      ExecutionResult()->SetDestination(row_ptr.ValueOf());
+      break;
+    }
+    case ast::Builtin::JoinHashTableEntryIterClose: {
+      LocalVar join_ht_iter = VisitExpressionForRValue(call->Arguments()[0]);
+      Emitter()->Emit(Bytecode::JoinHashTableEntryIteratorClose, join_ht_iter);
+      break;
+    }
     case ast::Builtin::JoinHashTableBuildParallel: {
       LocalVar join_hash_table = VisitExpressionForRValue(call->Arguments()[0]);
       LocalVar tls = VisitExpressionForRValue(call->Arguments()[1]);
@@ -2214,6 +2244,11 @@ void BytecodeGenerator::VisitBuiltinCallExpr(ast::CallExpr *call) {
     case ast::Builtin::JoinHashTableIterGetRow:
     case ast::Builtin::JoinHashTableIterHasNext:
     case ast::Builtin::JoinHashTableIterClose:
+    case ast::Builtin::JoinHashTableEntryIterInit:
+    case ast::Builtin::JoinHashTableEntryIterGetRow:
+    case ast::Builtin::JoinHashTableEntryIterHasNext:
+    case ast::Builtin::JoinHashTableEntryIterNext:
+    case ast::Builtin::JoinHashTableEntryIterClose:
     case ast::Builtin::JoinHashTableBuild:
     case ast::Builtin::JoinHashTableBuildParallel:
     case ast::Builtin::JoinHashTableFree: {

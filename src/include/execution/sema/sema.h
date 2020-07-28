@@ -131,6 +131,7 @@ class Sema : public ast::AstVisitor<Sema> {
   void CheckBuiltinJoinHashTableIterHasNext(ast::CallExpr *call);
   void CheckBuiltinJoinHashTableIterGetRow(ast::CallExpr *call);
   void CheckBuiltinJoinHashTableIterClose(ast::CallExpr *call);
+  void CheckBuiltinJoinHashTableEntryIterCall(ast::CallExpr *call, ast::Builtin builtin);
   void CheckBuiltinJoinHashTableBuild(ast::CallExpr *call, ast::Builtin builtin);
   void CheckBuiltinJoinHashTableFree(ast::CallExpr *call);
   void CheckBuiltinSorterInit(ast::CallExpr *call);

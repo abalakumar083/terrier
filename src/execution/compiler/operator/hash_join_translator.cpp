@@ -4,6 +4,7 @@
 #include <vector>
 #include "execution/compiler/function_builder.h"
 #include "execution/compiler/translator_factory.h"
+#include "parser/expression/constant_value_expression.h"
 #include "planner/plannodes/hash_join_plan_node.h"
 
 namespace terrier::execution::compiler {
@@ -48,7 +49,8 @@ void HashJoinLeftTranslator::InitializeStructs(util::RegionVector<ast::Decl *> *
   // Add child output columns
   GetChildOutputFields(&fields, LEFT_ATTR_NAME);
   // Add the left semi join flag.
-  if (op_->GetLogicalJoinType() == planner::LogicalJoinType::LEFT_SEMI) {
+  if (op_->GetLogicalJoinType() == planner::LogicalJoinType::LEFT_SEMI ||
+      op_->GetLogicalJoinType() == planner::LogicalJoinType::LEFT) {
     fields.emplace_back(codegen_->MakeField(mark_, codegen_->BuiltinType(ast::BuiltinType::Bool)));
   }
   // Make the struct
@@ -115,8 +117,9 @@ void HashJoinLeftTranslator::FillBuildRow(FunctionBuilder *builder) {
     ast::Expr *rhs = child_translator_->GetOutput(attr_idx);
     builder->Append(codegen_->Assign(lhs, rhs));
   }
-  // For left semi-joins, set the flag to true.
-  if (op_->GetLogicalJoinType() == planner::LogicalJoinType::LEFT_SEMI) {
+  // For left semi-joins and left outer joins, set the flag to true.
+  if (op_->GetLogicalJoinType() == planner::LogicalJoinType::LEFT_SEMI ||
+      op_->GetLogicalJoinType() == planner::LogicalJoinType::LEFT) {
     ast::Expr *lhs = GetMarkFlag();
     ast::Expr *rhs = codegen_->BoolLiteral(true);
     builder->Append(codegen_->Assign(lhs, rhs));
@@ -146,25 +149,36 @@ HashJoinRightTranslator::HashJoinRightTranslator(const terrier::planner::HashJoi
     : OperatorTranslator{codegen, brain::ExecutionOperatingUnitType::HASHJOIN_PROBE},
       op_(op),
       left_(dynamic_cast<HashJoinLeftTranslator *>(left)),
+      agg_loop_flag_(false),
       hash_val_{codegen->NewIdentifier("hash_val")},
       probe_struct_{codegen->NewIdentifier("ProbeRow")},
       probe_row_{codegen->NewIdentifier("probe_row")},
       key_check_{codegen->NewIdentifier("joinKeyCheckFn")},
-      join_iter_{codegen->NewIdentifier("join_iter")} {}
+      join_iter_{codegen->NewIdentifier("join_iter")},
+      join_entry_iter_{codegen->NewIdentifier("join_entry_iter")} {}
 
 void HashJoinRightTranslator::Produce(FunctionBuilder *builder) {
-  // Declare the iterator
-  DeclareIterator(builder);
+  // Declare the iterators
+  DeclareJoinIterator(builder);
+  if (op_->GetLogicalJoinType() == planner::LogicalJoinType::LEFT) {
+      DeclareEntryIterator(builder);
+  }
   // Let right child produce its code
   child_translator_->Produce(builder);
-  // Close iterator
-  GenIteratorClose(builder);
+  // Close iterators
+  if (op_->GetLogicalJoinType() == planner::LogicalJoinType::LEFT) {
+      GenEntryIteratorClose(builder);
+  }
+  GenJoinIteratorClose(builder);
 }
 
 void HashJoinRightTranslator::Abort(FunctionBuilder *builder) {
   child_translator_->Abort(builder);
-  // Close iterator
-  GenIteratorClose(builder);
+  // Close iterators
+  if (op_->GetLogicalJoinType() == planner::LogicalJoinType::LEFT) {
+      GenEntryIteratorClose(builder);
+  }
+  GenJoinIteratorClose(builder);
 }
 
 void HashJoinRightTranslator::Consume(FunctionBuilder *builder) {
@@ -182,6 +196,10 @@ void HashJoinRightTranslator::Consume(FunctionBuilder *builder) {
   if (op_->GetLogicalJoinType() == planner::LogicalJoinType::LEFT_SEMI) {
     GenLeftSemiJoinCondition(builder);
   }
+  // Set left join flag
+  if (op_->GetLogicalJoinType() == planner::LogicalJoinType::LEFT) {
+    SetLeftJoinFlag(builder);
+  }
   // Let the parent consume
   parent_translator_->Consume(builder);
   // Close if stmt
@@ -190,6 +208,26 @@ void HashJoinRightTranslator::Consume(FunctionBuilder *builder) {
   }
   // Close Loop
   builder->FinishBlockStmt();
+
+  // Create loop to output rows in left outer join which were not matched
+  if (op_->GetLogicalJoinType() == planner::LogicalJoinType::LEFT) {
+      // Set flag
+      agg_loop_flag_ = true;
+      // Generate the aggregation loop
+      GenEntryLoop(builder);
+      // Get the tuple
+      DeclareResult(builder);
+      // Generate Left join condition
+      GenLeftJoinCondition(builder);
+      // Let the parent consume
+      parent_translator_->Consume(builder);
+      // Close if stmt
+      builder->FinishBlockStmt();
+      // Close Loop
+      builder->FinishBlockStmt();
+      // Reset flag
+      agg_loop_flag_ = false;
+  }
 }
 
 ast::Expr *HashJoinRightTranslator::GetOutput(uint32_t attr_idx) {
@@ -205,8 +243,13 @@ ast::Expr *HashJoinRightTranslator::GetChildOutput(uint32_t child_idx, uint32_t 
   if (child_idx == 0) {
     return left_->GetOutput(attr_idx);
   }
-  // Other get the output from the probe row.
-  return GetProbeValue(attr_idx);
+
+  if (agg_loop_flag_) {
+      return codegen_->PeekValue(parser::ConstantValueExpression(type));
+  } else {
+      // Other get the output from the probe row.
+      return GetProbeValue(attr_idx);
+  }
 }
 
 ast::Expr *HashJoinRightTranslator::GetProbeValue(uint32_t idx) {
@@ -309,7 +352,7 @@ void HashJoinRightTranslator::FillProbeRow(FunctionBuilder *builder) {
   }
 }
 
-void HashJoinRightTranslator::DeclareIterator(FunctionBuilder *builder) {
+void HashJoinRightTranslator::DeclareJoinIterator(FunctionBuilder *builder) {
   ast::Expr *iter_type = codegen_->BuiltinType(ast::BuiltinType::Kind::JoinHashTableIterator);
   builder->Append(codegen_->DeclareVariable(join_iter_, iter_type, nullptr));
 }
@@ -341,7 +384,7 @@ void HashJoinRightTranslator::GenProbeLoop(FunctionBuilder *builder) {
 }
 
 // Call @joinHTIterCLose(&join_iter)
-void HashJoinRightTranslator::GenIteratorClose(FunctionBuilder *builder) {
+void HashJoinRightTranslator::GenJoinIteratorClose(FunctionBuilder *builder) {
   ast::Expr *close_call = codegen_->OneArgCall(ast::Builtin::JoinHashTableIterClose, join_iter_, true);
   builder->Append(codegen_->MakeStmt(close_call));
 }
@@ -357,10 +400,69 @@ void HashJoinRightTranslator::DeclareMatch(FunctionBuilder *builder) {
   builder->Append(codegen_->DeclareVariable(left_->build_row_, nullptr, cast_call));
 }
 
+// Declare var agg_iter: *AggregationHashTableIterator
+void HashJoinRightTranslator::DeclareEntryIterator(FunctionBuilder *builder) {
+  ast::Expr *iter_type = codegen_->BuiltinType(ast::BuiltinType::JoinHashTableEntryIterator);
+  builder->Append(codegen_->DeclareVariable(join_entry_iter_, iter_type, nullptr));
+}
+
+// for (@aggHTIterInit(&agg_iter, &state.table); @aggHTIterHasNext(&agg_iter); @aggHTIterNext(&agg_iter)) {...}
+void HashJoinRightTranslator::GenEntryLoop(FunctionBuilder *builder) {
+  // Loop Initialization
+  std::vector<ast::Expr *> init_args{codegen_->PointerTo(join_entry_iter_),
+                                     codegen_->GetStateMemberPtr(left_->join_ht_)};
+  ast::Expr *init_call = codegen_->BuiltinCall(ast::Builtin::JoinHashTableEntryIterInit, std::move(init_args));
+  ast::Stmt *loop_init = codegen_->MakeStmt(init_call);
+  // Loop condition
+  ast::Expr *has_next_call = codegen_->OneArgCall(ast::Builtin::JoinHashTableEntryIterHasNext,
+          join_entry_iter_,true);
+  // Loop update
+  ast::Expr *next_call = codegen_->OneArgCall(ast::Builtin::JoinHashTableEntryIterNext, join_entry_iter_, true);
+  ast::Stmt *loop_update = codegen_->MakeStmt(next_call);
+  // Make the loop
+  builder->StartForStmt(loop_init, has_next_call, loop_update);
+}
+
+// Declare var agg_payload = @ptrCast(*AggPayload, @aggHTIterGetRow(&agg_iter))
+void HashJoinRightTranslator::DeclareResult(FunctionBuilder *builder) {
+  // @aggHTIterGetRow(&agg_iter)
+  ast::Expr *get_row_call = codegen_->OneArgCall(ast::Builtin::JoinHashTableEntryIterGetRow,
+          join_entry_iter_, true);
+
+  // Gen create @ptrcast(*BuildRow, ...)
+  ast::Expr *cast_call = codegen_->PtrCast(left_->build_struct_, get_row_call);
+
+  // Declare var build_row
+  builder->Append(codegen_->DeclareVariable(left_->build_row_, nullptr, cast_call));
+}
+
+void HashJoinRightTranslator::GenEntryIteratorClose(FunctionBuilder *builder) {
+  // Call @aggHTIterCLose(agg_iter)
+  ast::Expr *close_call = codegen_->OneArgCall(ast::Builtin::JoinHashTableEntryIterClose,
+          join_entry_iter_, true);
+  builder->Append(codegen_->MakeStmt(close_call));
+}
+
 void HashJoinRightTranslator::GenLeftSemiJoinCondition(FunctionBuilder *builder) {
   ast::Expr *cond = left_->GetMarkFlag();
   builder->StartIfStmt(cond);
   // Set flag to false to prevent further iterations.
+  ast::Expr *lhs = left_->GetMarkFlag();
+  ast::Expr *rhs = codegen_->BoolLiteral(false);
+  builder->Append(codegen_->Assign(lhs, rhs));
+}
+
+void HashJoinRightTranslator::GenLeftJoinCondition(FunctionBuilder *builder) {
+  ast::Expr *cond = left_->GetMarkFlag();
+  builder->StartIfStmt(cond);
+  // Set flag to false to prevent further iterations.
+  ast::Expr *lhs = left_->GetMarkFlag();
+  ast::Expr *rhs = codegen_->BoolLiteral(false);
+  builder->Append(codegen_->Assign(lhs, rhs));
+}
+
+void HashJoinRightTranslator::SetLeftJoinFlag(FunctionBuilder *builder) {
+  // Set flag to indicate we visited it.
   ast::Expr *lhs = left_->GetMarkFlag();
   ast::Expr *rhs = codegen_->BoolLiteral(false);
   builder->Append(codegen_->Assign(lhs, rhs));

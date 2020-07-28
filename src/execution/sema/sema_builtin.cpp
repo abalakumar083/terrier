@@ -846,6 +846,67 @@ void Sema::CheckBuiltinJoinHashTableIterClose(execution::ast::CallExpr *call) {
   call->SetType(GetBuiltinType(ast::BuiltinType::Nil));
 }
 
+void Sema::CheckBuiltinJoinHashTableEntryIterCall(ast::CallExpr *call, ast::Builtin builtin) {
+  if (!CheckArgCountAtLeast(call, 1)) {
+    return;
+  }
+
+  const auto &args = call->Arguments();
+
+  const auto join_ht_iter_kind = ast::BuiltinType::JoinHashTableEntryIterator;
+  if (!IsPointerToSpecificBuiltin(args[0]->GetType(), join_ht_iter_kind)) {
+    ReportIncorrectCallArg(call, 0, GetBuiltinType(join_ht_iter_kind)->PointerTo());
+    return;
+  }
+
+  switch (builtin) {
+    case ast::Builtin::JoinHashTableEntryIterInit: {
+      if (!CheckArgCount(call, 2)) {
+        return;
+      }
+      const auto join_ht_kind = ast::BuiltinType::JoinHashTable;
+      if (!IsPointerToSpecificBuiltin(args[1]->GetType(), join_ht_kind)) {
+        ReportIncorrectCallArg(call, 1, GetBuiltinType(join_ht_kind)->PointerTo());
+        return;
+      }
+      call->SetType(GetBuiltinType(ast::BuiltinType::Nil));
+      break;
+    }
+    case ast::Builtin::JoinHashTableEntryIterHasNext: {
+      if (!CheckArgCount(call, 1)) {
+        return;
+      }
+      call->SetType(GetBuiltinType(ast::BuiltinType::Bool));
+      break;
+    }
+    case ast::Builtin::JoinHashTableEntryIterNext: {
+      if (!CheckArgCount(call, 1)) {
+        return;
+      }
+      call->SetType(GetBuiltinType(ast::BuiltinType::Nil));
+      break;
+    }
+    case ast::Builtin::JoinHashTableEntryIterGetRow: {
+      if (!CheckArgCount(call, 1)) {
+        return;
+      }
+      const auto byte_kind = ast::BuiltinType::Uint8;
+      call->SetType(GetBuiltinType(byte_kind)->PointerTo());
+      break;
+    }
+    case ast::Builtin::JoinHashTableEntryIterClose: {
+      if (!CheckArgCount(call, 1)) {
+        return;
+      }
+      call->SetType(GetBuiltinType(ast::BuiltinType::Nil));
+      break;
+    }
+    default: {
+      UNREACHABLE("Impossible aggregation hash table iterator call");
+    }
+  }
+}
+
 void Sema::CheckBuiltinExecutionContextCall(ast::CallExpr *call, UNUSED_ATTRIBUTE ast::Builtin builtin) {
   uint32_t expected_arg_count = 1;
 
@@ -2459,6 +2520,14 @@ void Sema::CheckBuiltinCall(ast::CallExpr *call) {
     }
     case ast::Builtin::JoinHashTableIterClose: {
       CheckBuiltinJoinHashTableIterClose(call);
+      break;
+    }
+    case ast::Builtin::JoinHashTableEntryIterInit:
+    case ast::Builtin::JoinHashTableEntryIterGetRow:
+    case ast::Builtin::JoinHashTableEntryIterHasNext:
+    case ast::Builtin::JoinHashTableEntryIterNext:
+    case ast::Builtin::JoinHashTableEntryIterClose: {
+      CheckBuiltinJoinHashTableEntryIterCall(call, builtin);
       break;
     }
     case ast::Builtin::JoinHashTableBuild:

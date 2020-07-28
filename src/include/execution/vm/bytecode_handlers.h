@@ -1149,6 +1149,8 @@ VM_OP void OpJoinHashTableBuildParallel(terrier::execution::sql::JoinHashTable *
                                         terrier::execution::sql::ThreadStateContainer *thread_state_container,
                                         uint32_t jht_offset);
 
+VM_OP void OpJoinHashTableFree(terrier::execution::sql::JoinHashTable *join_hash_table);
+
 VM_OP_HOT void OpJoinHashTableIterInit(terrier::execution::sql::JoinHashTableIterator *result,
                                        terrier::execution::sql::JoinHashTable *join_hash_table, terrier::hash_t hash) {
   *result = join_hash_table->Lookup<false>(hash);
@@ -1169,7 +1171,31 @@ VM_OP_HOT void OpJoinHashTableIterClose(terrier::execution::sql::JoinHashTableIt
   iterator->~JoinHashTableIterator();
 }
 
-VM_OP void OpJoinHashTableFree(terrier::execution::sql::JoinHashTable *join_hash_table);
+VM_OP_HOT void OpJoinHashTableEntryIteratorInit(terrier::execution::sql::JoinHashTableEntryIterator *iter,
+                                                terrier::execution::sql::JoinHashTable *join_hash_table) {
+
+  TERRIER_ASSERT(join_hash_table != nullptr, "Null hash table");
+  new (iter) terrier::execution::sql::JoinHashTableEntryIterator(*join_hash_table);
+}
+
+VM_OP_HOT void OpJoinHashTableEntryIteratorHasNext(bool *has_more,
+                                                   terrier::execution::sql::JoinHashTableEntryIterator *iter) {
+  *has_more = iter->HasNext();
+}
+
+VM_OP_HOT void OpJoinHashTableEntryIteratorNext(terrier::execution::sql::JoinHashTableEntryIterator *iter) {
+  iter->Next();
+}
+
+VM_OP_HOT void OpJoinHashTableEntryIteratorGetRow(const terrier::byte **row,
+                                                  terrier::execution::sql::JoinHashTableEntryIterator *iter) {
+  *row = iter->GetCurrentEntryRow();
+}
+
+VM_OP_HOT void OpJoinHashTableEntryIteratorClose(terrier::execution::sql::JoinHashTableEntryIterator *iter) {
+  iter->~JoinHashTableEntryIterator();
+}
+
 
 // ---------------------------------------------------------
 // Sorting
