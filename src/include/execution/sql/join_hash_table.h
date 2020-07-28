@@ -3,6 +3,7 @@
 #include <memory>
 #include <vector>
 
+#include "common/macros.h"
 #include "common/spin_latch.h"
 #include "common/strong_typedef.h"
 #include "execution/sql/bloom_filter.h"
@@ -316,7 +317,6 @@ inline bool JoinHashTableIterator::HasNext(JoinHashTableIterator::KeyEq key_eq, 
 
 /**
  * An iterator over the contents of an join hash table
- * TODO(abalakum): Make sure you never use a concise table when doing left outer joins
  */
 class JoinHashTableEntryIterator {
  public:
@@ -324,7 +324,10 @@ class JoinHashTableEntryIterator {
    * Constructor
    * @param agg_table hash table to iterator over
    */
-  explicit JoinHashTableEntryIterator(const JoinHashTable &join_table) : iter_(join_table.generic_hash_table_) {}
+  explicit JoinHashTableEntryIterator(const JoinHashTable &join_table) : iter_(join_table.generic_hash_table_) {
+    TERRIER_ASSERT(!join_table.use_concise_ht_, "This iterator only works for generic_hash_tables, "
+                                                "not concise hash tables!" );
+  }
 
   /**
    * Does this iterate have more data

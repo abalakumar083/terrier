@@ -165,11 +165,31 @@ void HashJoinRightTranslator::Produce(FunctionBuilder *builder) {
   }
   // Let right child produce its code
   child_translator_->Produce(builder);
-  // Close iterators
+
+  // Close iterator
+  GenJoinIteratorClose(builder);
+
+  // Create loop to output rows in left outer join which were not matched
   if (op_->GetLogicalJoinType() == planner::LogicalJoinType::LEFT) {
+      // Set flag
+      agg_loop_flag_ = true;
+      // Generate the aggregation loop
+      GenEntryLoop(builder);
+      // Get the tuple
+      DeclareResult(builder);
+      // Generate Left join condition
+      GenLeftJoinCondition(builder);
+      // Let the parent consume
+      parent_translator_->Consume(builder);
+      // Close if stmt
+      builder->FinishBlockStmt();
+      // Close Loop
+      builder->FinishBlockStmt();
+      // Reset flag
+      agg_loop_flag_ = false;
+      // Close entry iterator
       GenEntryIteratorClose(builder);
   }
-  GenJoinIteratorClose(builder);
 }
 
 void HashJoinRightTranslator::Abort(FunctionBuilder *builder) {
@@ -208,26 +228,6 @@ void HashJoinRightTranslator::Consume(FunctionBuilder *builder) {
   }
   // Close Loop
   builder->FinishBlockStmt();
-
-  // Create loop to output rows in left outer join which were not matched
-  if (op_->GetLogicalJoinType() == planner::LogicalJoinType::LEFT) {
-      // Set flag
-      agg_loop_flag_ = true;
-      // Generate the aggregation loop
-      GenEntryLoop(builder);
-      // Get the tuple
-      DeclareResult(builder);
-      // Generate Left join condition
-      GenLeftJoinCondition(builder);
-      // Let the parent consume
-      parent_translator_->Consume(builder);
-      // Close if stmt
-      builder->FinishBlockStmt();
-      // Close Loop
-      builder->FinishBlockStmt();
-      // Reset flag
-      agg_loop_flag_ = false;
-  }
 }
 
 ast::Expr *HashJoinRightTranslator::GetOutput(uint32_t attr_idx) {
@@ -455,10 +455,6 @@ void HashJoinRightTranslator::GenLeftSemiJoinCondition(FunctionBuilder *builder)
 void HashJoinRightTranslator::GenLeftJoinCondition(FunctionBuilder *builder) {
   ast::Expr *cond = left_->GetMarkFlag();
   builder->StartIfStmt(cond);
-  // Set flag to false to prevent further iterations.
-  ast::Expr *lhs = left_->GetMarkFlag();
-  ast::Expr *rhs = codegen_->BoolLiteral(false);
-  builder->Append(codegen_->Assign(lhs, rhs));
 }
 
 void HashJoinRightTranslator::SetLeftJoinFlag(FunctionBuilder *builder) {
